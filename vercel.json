@@ -4,13 +4,14 @@
   "outputDirectory": "project/dist",
   "installCommand": "cd project && npm install",
   "framework": "vite",
-  "builds": [
+  "routes": [
     {
-      "src": "project/package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "dist"
-      }
+      "src": "/assets/(.*)",
+      "dest": "/assets/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
     }
   ]
 } 
