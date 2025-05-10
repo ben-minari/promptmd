@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "cd project && npm install && npm run build",
+  "buildCommand": "cd project && npm run build",
   "outputDirectory": "project/dist",
   "installCommand": "cd project && npm install",
   "framework": "vite"
