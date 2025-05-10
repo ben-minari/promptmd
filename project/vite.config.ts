@@ -7,12 +7,17 @@ export default defineConfig({
   base: '/',
   optimizeDeps: {
     exclude: ['lucide-react'],
+    include: ['@supabase/supabase-js']
   },
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
     rollupOptions: {
-      external: ['@supabase/supabase-js']
+      output: {
+        manualChunks: {
+          'supabase': ['@supabase/supabase-js']
+        }
+      }
     }
   }
 });
