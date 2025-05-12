@@ -1,10 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Bookmark, Edit, FileText, Settings, Star, Users } from 'lucide-react';
+import { Bookmark, FileText, Settings, Star, Users, PlusCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { usePrompt } from '../context/PromptContext';
 import PromptCard from '../components/prompts/PromptCard';
 
-const ProfilePage: React.FC = () => {
+interface ProfilePageProps {
+  onOpenModal: () => void;
+  hasPrompts: boolean;
+}
+
+const ProfilePage: React.FC<ProfilePageProps> = ({ onOpenModal, hasPrompts }) => {
   const { user } = useAuth();
   const { getUserPrompts, getSavedPrompts } = usePrompt();
   const [activeTab, setActiveTab] = useState('my-prompts');
@@ -132,13 +137,15 @@ const ProfilePage: React.FC = () => {
             <>
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-xl font-semibold text-slate-800">My Prompts</h2>
-                <a
-                  href="/create"
-                  className="px-4 py-2 bg-teal-600 text-white rounded-md hover:bg-teal-700 transition duration-150 flex items-center"
-                >
-                  <Edit className="h-4 w-4 mr-2" />
-                  Create New
-                </a>
+                {hasPrompts && (
+                  <button
+                    onClick={onOpenModal}
+                    className="px-4 py-2 bg-teal-600 text-white rounded-md hover:bg-teal-700 transition duration-150 flex items-center"
+                  >
+                    <PlusCircle className="h-4 w-4 mr-2" />
+                    Create a Prompt
+                  </button>
+                )}
               </div>
               
               {userPrompts.length > 0 ? (
@@ -150,12 +157,13 @@ const ProfilePage: React.FC = () => {
               ) : (
                 <div className="bg-white rounded-lg border border-slate-200 p-6 text-center">
                   <p className="text-slate-600 mb-4">You haven't created any prompts yet.</p>
-                  <a
-                    href="/create"
+                  <button
+                    onClick={onOpenModal}
                     className="inline-flex items-center px-4 py-2 bg-teal-600 text-white rounded-md hover:bg-teal-700 transition duration-150"
                   >
+                    <PlusCircle className="h-4 w-4 mr-2" />
                     Create Your First Prompt
-                  </a>
+                  </button>
                 </div>
               )}
             </>

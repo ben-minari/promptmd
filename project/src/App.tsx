@@ -10,7 +10,7 @@ import HomePage from './pages/HomePage';
 import BrowsePromptsPage from './pages/BrowsePromptsPage';
 import PromptDetailPage from './pages/PromptDetailPage';
 import CreatePromptPage from './pages/CreatePromptPage';
-import ProfilePage from './pages/ProfilePage';
+import ProfilePageWithModal from './pages/ProfilePageWithModal';
 import AuthPage from './pages/AuthPage';
 import AuthCallbackPage from './pages/AuthCallbackPage';
 
@@ -44,7 +44,7 @@ function App() {
               <Route path="browse" element={<BrowsePromptsPage />} />
               <Route path="prompts/:id" element={<PromptDetailPage />} />
               <Route path="create" element={<CreatePromptPage />} />
-              <Route path="profile" element={<ProfilePage />} />
+              <Route path="profile" element={<ProfilePageWithModal />} />
             </Route>
             <Route path="/test" element={<PromptTest />} />
           </Routes>
