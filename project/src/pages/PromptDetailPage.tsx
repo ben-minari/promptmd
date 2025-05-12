@@ -9,11 +9,10 @@ import CommentSection from '../components/comments/CommentSection';
 
 const PromptDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const { getPromptById, ratePrompt, getUserPromptRating, allPrompts, savePrompt } = usePrompt();
+  const { getPromptById, ratePrompt, getUserPromptRating, allPrompts, savePrompt, getSavedPrompts } = usePrompt();
   const { user } = useAuth();
   const [currentPrompt, setCurrentPrompt] = useState<Prompt | null>(null);
   const [userRating, setUserRating] = useState<number | null>(null);
-  const [isSaved, setIsSaved] = useState(false);
   const [copied, setCopied] = useState(false);
 
   // Get prompt by ID from context
@@ -50,15 +49,36 @@ const PromptDetailPage: React.FC = () => {
     );
   }
 
-  const handleSavePrompt = () => {
+  const savedPrompts = getSavedPrompts();
+  const isSaved = savedPrompts.some(p => p.id === currentPrompt.id);
+
+  const handleSavePrompt = async () => {
     if (!user) {
       toast.error('Please sign in to save prompts');
       return;
     }
     
-    savePrompt(currentPrompt.id);
-    setIsSaved(!isSaved);
-    toast.success(isSaved ? 'Removed from saved prompts' : 'Added to saved prompts');
+    try {
+      await savePrompt(currentPrompt.id);
+      
+      // Fetch the latest prompt data
+      const { data: updatedPrompt, error } = await supabase
+        .from('prompts')
+        .select('*')
+        .eq('id', currentPrompt.id)
+        .single();
+
+      if (error) throw error;
+      
+      if (updatedPrompt) {
+        setCurrentPrompt(updatedPrompt);
+      }
+      
+      toast.success(isSaved ? 'Removed from saved prompts' : 'Added to saved prompts');
+    } catch (error) {
+      console.error('Error saving prompt:', error);
+      toast.error('Failed to save prompt');
+    }
   };
 
   const handleCopyPrompt = () => {
@@ -156,7 +176,7 @@ const PromptDetailPage: React.FC = () => {
               </div>
               <div className="flex items-center">
                 <Bookmark className="h-4 w-4 text-slate-400 mr-1" />
-                <span>{currentPrompt.usage_count} uses</span>
+                <span>{currentPrompt.usage_count} saves</span>
               </div>
             </div>
           </div>

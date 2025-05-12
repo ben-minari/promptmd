@@ -2,6 +2,8 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Star, Bookmark, ThumbsUp, MessageSquare, MoreHorizontal, User } from 'lucide-react';
 import { usePrompt } from '../../context/PromptContext';
+import { useAuth } from '../../context/AuthContext';
+import toast from 'react-hot-toast';
 
 interface PromptCardProps {
   prompt: any;
@@ -9,14 +11,22 @@ interface PromptCardProps {
 }
 
 const PromptCard: React.FC<PromptCardProps> = ({ prompt, showActions = false }) => {
-  const { savePrompt } = usePrompt();
-  const [isSaved, setIsSaved] = React.useState(false);
+  const { savePrompt, getSavedPrompts } = usePrompt();
+  const { user } = useAuth();
+  const savedPrompts = getSavedPrompts();
+  const isSaved = savedPrompts.some(p => p.id === prompt.id);
 
-  const handleSave = (e: React.MouseEvent) => {
+  const handleSave = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    savePrompt(prompt.id);
-    setIsSaved(!isSaved);
+    
+    if (!user) {
+      toast.error('Please sign in to save prompts');
+      return;
+    }
+    
+    await savePrompt(prompt.id);
+    toast.success(isSaved ? 'Removed from saved prompts' : 'Added to saved prompts');
   };
 
   const truncateText = (text: string, maxLength: number) => {
