@@ -4,7 +4,7 @@ import { supabase } from './AuthContext';
 // Sample data
 import { samplePrompts } from '../data/samplePrompts';
 
-interface Prompt {
+export interface Prompt {
   id: string;
   title: string;
   description: string;
@@ -31,11 +31,13 @@ interface PromptContextType {
   featuredPrompts: Prompt[];
   trendingPrompts: Prompt[];
   getPromptById: (id: string) => Prompt | undefined;
+  getUserPromptRating: (promptId: string) => Promise<number | null>;
   getUserPrompts: () => Promise<Prompt[]>;
   getSavedPrompts: () => Prompt[];
   addPrompt: (prompt: Omit<Prompt, 'id' | 'author' | 'created_at' | 'rating' | 'rating_count' | 'usage_count' | 'featured'>) => Promise<void>;
   savePrompt: (promptId: string) => Promise<void>;
-  ratePrompt: (promptId: string, rating: number) => Promise<void>;
+  ratePrompt: (promptId: string, rating: number) => Promise<Prompt>;
+  refreshPrompts: () => Promise<void>;
   loading: boolean;
   error: string | null;
 }
@@ -209,35 +211,142 @@ export const PromptProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
-  const ratePrompt = async (promptId: string, rating: number) => {
+  const ratePrompt = async (promptId: string, rating: number): Promise<Prompt> => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) throw new Error('User not authenticated');
 
-      const prompt = prompts.find(p => p.id === promptId);
-      if (!prompt) throw new Error('Prompt not found');
+      console.log('Rating prompt:', { promptId, rating, userId: session.user.id });
 
-      const newRatingCount = prompt.rating_count + 1;
-      const newRating = ((prompt.rating * prompt.rating_count) + rating) / newRatingCount;
+      // First, check if the user has already rated this prompt
+      const { data: existingRating, error: checkError } = await supabase
+        .from('prompt_ratings')
+        .select('id, rating')
+        .eq('user_id', session.user.id)
+        .eq('prompt_id', promptId)
+        .maybeSingle();
 
-      const { error } = await supabase
+      if (checkError) {
+        console.error('Error checking existing rating:', checkError);
+        throw checkError;
+      }
+
+      console.log('Existing rating:', existingRating);
+
+      let error;
+      if (existingRating) {
+        // Update existing rating
+        console.log('Updating existing rating:', { id: existingRating.id, newRating: rating });
+        const { error: updateError } = await supabase
+          .from('prompt_ratings')
+          .update({ rating, updated_at: new Date().toISOString() })
+          .eq('id', existingRating.id);
+        error = updateError;
+      } else {
+        // Insert new rating
+        console.log('Inserting new rating:', { userId: session.user.id, promptId, rating });
+        const { error: insertError } = await supabase
+          .from('prompt_ratings')
+          .insert({
+            user_id: session.user.id,
+            prompt_id: promptId,
+            rating
+          });
+        error = insertError;
+      }
+
+      if (error) {
+        console.error('Error updating/inserting rating:', error);
+        throw error;
+      }
+
+      // Wait a short moment to ensure the trigger has completed
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Refresh all prompts to ensure we have the latest data
+      await refreshPrompts();
+
+      // Fetch the specific prompt to return
+      const { data: updatedPrompt, error: fetchError } = await supabase
         .from('prompts')
-        .update({
-          rating: newRating,
-          rating_count: newRatingCount,
-        })
-        .eq('id', promptId);
+        .select('*')
+        .eq('id', promptId)
+        .single();
 
-      if (error) throw error;
+      if (fetchError) {
+        console.error('Error fetching updated prompt:', fetchError);
+        throw fetchError;
+      }
+      if (!updatedPrompt) {
+        throw new Error('Failed to fetch updated prompt');
+      }
 
-      setPrompts(prompts.map(p => 
-        p.id === promptId 
-          ? { ...p, rating: newRating, rating_count: newRatingCount }
-          : p
-      ));
+      console.log('Updated prompt from database:', updatedPrompt);
+
+      // Also fetch the current ratings to verify
+      const { data: ratings, error: ratingsError } = await supabase
+        .from('prompt_ratings')
+        .select('rating')
+        .eq('prompt_id', promptId);
+
+      if (ratingsError) {
+        console.error('Error fetching ratings:', ratingsError);
+      } else {
+        console.log('Current ratings for prompt:', ratings);
+        const avgRating = ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length;
+        console.log('Calculated average rating:', avgRating);
+        console.log('Number of ratings:', ratings.length);
+      }
+
+      return updatedPrompt as Prompt;
     } catch (err) {
+      console.error('Error in ratePrompt:', err);
       setError('Failed to rate prompt');
       throw err;
+    }
+  };
+
+  const getUserPromptRating = async (promptId: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) return null;
+
+      const { data, error } = await supabase
+        .from('prompt_ratings')
+        .select('rating')
+        .eq('user_id', session.user.id)
+        .eq('prompt_id', promptId)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error getting user rating:', error);
+        return null;
+      }
+      return data?.rating || null;
+    } catch (err) {
+      console.error('Error getting user rating:', err);
+      return null;
+    }
+  };
+
+  const refreshPrompts = async () => {
+    try {
+      console.log('Refreshing prompts...');
+      const { data, error } = await supabase
+        .from('prompts')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error refreshing prompts:', error);
+        throw error;
+      }
+      
+      console.log('Refreshed prompts:', data);
+      setPrompts(data || []);
+    } catch (err) {
+      console.error('Error in refreshPrompts:', err);
+      setError('Failed to refresh prompts');
     }
   };
 
@@ -248,11 +357,13 @@ export const PromptProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         featuredPrompts,
         trendingPrompts,
         getPromptById,
+        getUserPromptRating,
         getUserPrompts,
         getSavedPrompts,
         addPrompt,
         savePrompt,
         ratePrompt,
+        refreshPrompts,
         loading,
         error,
       }}
