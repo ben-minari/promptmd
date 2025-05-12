@@ -21,7 +21,7 @@ export interface Prompt {
   created_at: string;
   rating: number;
   rating_count: number;
-  usage_count: number;
+  usage_count: number; // This now represents number of saves
   featured: boolean;
   comments?: any[]; // Optional array of comments
 }
@@ -186,7 +186,24 @@ export const PromptProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) throw new Error('User not authenticated');
 
+      console.log('Starting savePrompt operation for promptId:', promptId);
+
+      // Get current prompt data
+      const { data: promptData, error: fetchError } = await supabase
+        .from('prompts')
+        .select('usage_count, author')
+        .eq('id', promptId)
+        .single();
+
+      if (fetchError) {
+        console.error('Error fetching prompt data:', fetchError);
+        throw fetchError;
+      }
+
+      console.log('Current prompt data:', promptData);
+
       if (savedPromptIds.includes(promptId)) {
+        console.log('Removing prompt from saved prompts');
         // Remove from saved
         const { error } = await supabase
           .from('saved_prompts')
@@ -194,18 +211,85 @@ export const PromptProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           .eq('user_id', session.user.id)
           .eq('prompt_id', promptId);
 
-        if (error) throw error;
+        if (error) {
+          console.error('Error removing from saved_prompts:', error);
+          throw error;
+        }
+
         setSavedPromptIds(savedPromptIds.filter(id => id !== promptId));
+
+        // Decrement usage_count
+        const newUsageCount = Math.max((promptData?.usage_count || 0) - 1, 0);
+        console.log('Updating usage_count to:', newUsageCount);
+        
+        // Perform the update with transaction
+        const { data: updateData, error: updateError } = await supabase.rpc('update_prompt_usage_count', {
+          p_prompt_id: promptId,
+          p_new_count: newUsageCount
+        });
+
+        if (updateError) {
+          console.error('Error updating usage_count:', updateError);
+          throw updateError;
+        }
+
+        console.log('Update result:', updateData);
+
+        // Update local state immediately
+        setPrompts(prompts.map(prompt => 
+          prompt.id === promptId 
+            ? { ...prompt, usage_count: newUsageCount }
+            : prompt
+        ));
       } else {
+        console.log('Adding prompt to saved prompts');
         // Add to saved
         const { error } = await supabase
           .from('saved_prompts')
           .insert([{ user_id: session.user.id, prompt_id: promptId }]);
 
-        if (error) throw error;
+        if (error) {
+          console.error('Error adding to saved_prompts:', error);
+          throw error;
+        }
+
         setSavedPromptIds([...savedPromptIds, promptId]);
+
+        // Increment usage_count
+        const newUsageCount = (promptData?.usage_count || 0) + 1;
+        console.log('Updating usage_count to:', newUsageCount);
+        
+        // Perform the update with transaction
+        const { data: updateData, error: updateError } = await supabase.rpc('update_prompt_usage_count', {
+          p_prompt_id: promptId,
+          p_new_count: newUsageCount
+        });
+
+        if (updateError) {
+          console.error('Error updating usage_count:', updateError);
+          throw updateError;
+        }
+
+        console.log('Update result:', updateData);
+
+        // Update local state immediately
+        setPrompts(prompts.map(prompt => 
+          prompt.id === promptId 
+            ? { ...prompt, usage_count: newUsageCount }
+            : prompt
+        ));
       }
+
+      // Wait for all operations to complete
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Refresh prompts to ensure consistency
+      console.log('Refreshing prompts to ensure consistency');
+      await refreshPrompts();
+      
+      console.log('Save operation completed successfully');
     } catch (err) {
+      console.error('Error in savePrompt:', err);
       setError('Failed to save prompt');
       throw err;
     }
@@ -343,7 +427,11 @@ export const PromptProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
       
       console.log('Refreshed prompts:', data);
-      setPrompts(data || []);
+      if (data) {
+        setPrompts(data);
+        // Force a re-render by creating a new array
+        setPrompts([...data]);
+      }
     } catch (err) {
       console.error('Error in refreshPrompts:', err);
       setError('Failed to refresh prompts');
