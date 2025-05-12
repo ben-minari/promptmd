@@ -35,6 +35,18 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onOpenModal, hasPrompts }) =>
     loadPrompts();
   }, [user, getUserPrompts, getSavedPrompts]);
 
+  // Calculate average rating from user's prompts
+  const calculateAverageRating = () => {
+    if (userPrompts.length === 0) return '0.0';
+    const totalRating = userPrompts.reduce((sum, prompt) => sum + prompt.rating, 0);
+    return (totalRating / userPrompts.length).toFixed(1);
+  };
+
+  // Calculate total prompt uses
+  const calculateTotalPromptUses = () => {
+    return userPrompts.reduce((sum, prompt) => sum + prompt.usage_count, 0).toString();
+  };
+
   if (!user) {
     return (
       <div className="flex flex-col items-center justify-center py-12">
@@ -54,8 +66,8 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onOpenModal, hasPrompts }) =>
   const stats = [
     { label: 'Prompts Created', value: userPrompts.length, icon: <FileText className="h-5 w-5 text-purple-500" /> },
     { label: 'Saved Prompts', value: savedPrompts.length, icon: <Bookmark className="h-5 w-5 text-teal-500" /> },
-    { label: 'Average Rating', value: '4.8', icon: <Star className="h-5 w-5 text-amber-500" /> },
-    { label: 'Prompt Uses', value: '138', icon: <Users className="h-5 w-5 text-blue-500" /> },
+    { label: 'Average Rating', value: calculateAverageRating(), icon: <Star className="h-5 w-5 text-amber-500" /> },
+    { label: 'Prompt Uses', value: calculateTotalPromptUses(), icon: <Users className="h-5 w-5 text-blue-500" /> },
   ];
 
   if (loading) {
@@ -72,7 +84,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onOpenModal, hasPrompts }) =>
       <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
         <div className="bg-gradient-to-r from-blue-500 to-teal-500 h-32"></div>
         <div className="px-6 pb-6">
-          <div className="flex flex-col sm:flex-row items-start sm:items-end gap-4 -mt-12 mb-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-end gap-4 -mt-8 mb-6">
             <div className="w-24 h-24 rounded-full border-4 border-white bg-white shadow-sm overflow-hidden">
               <img 
                 src={user.user_metadata?.avatar_url || "https://images.pexels.com/photos/5327585/pexels-photo-5327585.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1"} 
