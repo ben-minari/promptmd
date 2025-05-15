@@ -11,7 +11,7 @@ interface ProfilePageProps {
 
 const ProfilePage: React.FC<ProfilePageProps> = ({ onOpenModal, hasPrompts }) => {
   const { user } = useAuth();
-  const { getUserPrompts, getSavedPrompts } = usePrompt();
+  const { getUserPrompts, getSavedPrompts, allPrompts } = usePrompt();
   const [activeTab, setActiveTab] = useState('my-prompts');
   const [userPrompts, setUserPrompts] = useState<any[]>([]);
   const [savedPrompts, setSavedPrompts] = useState<any[]>([]);

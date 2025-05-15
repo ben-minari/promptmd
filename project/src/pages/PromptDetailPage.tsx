@@ -60,20 +60,6 @@ const PromptDetailPage: React.FC = () => {
     
     try {
       await savePrompt(currentPrompt.id);
-      
-      // Fetch the latest prompt data
-      const { data: updatedPrompt, error } = await supabase
-        .from('prompts')
-        .select('*')
-        .eq('id', currentPrompt.id)
-        .single();
-
-      if (error) throw error;
-      
-      if (updatedPrompt) {
-        setCurrentPrompt(updatedPrompt);
-      }
-      
       toast.success(isSaved ? 'Removed from saved prompts' : 'Added to saved prompts');
     } catch (error) {
       console.error('Error saving prompt:', error);

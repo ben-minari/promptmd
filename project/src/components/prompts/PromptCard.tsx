@@ -102,7 +102,15 @@ const PromptCard: React.FC<PromptCardProps> = ({ prompt, showActions = false }) 
           <span className="text-xs text-slate-600">{prompt.author.name}</span>
         </div>
         
-        <div className="flex space-x-2">
+        <div className="flex items-center space-x-4">
+          <div className="flex items-center text-amber-500">
+            <Star className="h-4 w-4 mr-1" />
+            <span className="text-xs font-medium">{prompt.rating?.toFixed(1) || '0.0'}</span>
+          </div>
+          <div className="flex items-center text-slate-500">
+            <Bookmark className="h-4 w-4 mr-1" />
+            <span className="text-xs font-medium">{prompt.usage_count || 0}</span>
+          </div>
           <button
             onClick={handleSave}
             className={`p-1.5 rounded-full ${
