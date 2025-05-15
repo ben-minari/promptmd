@@ -90,11 +90,7 @@ const Navbar: React.FC = () => {
                     </button>
                   </div>
                 </div>
-              ) : (
-                <Link to="/auth" className="text-white bg-teal-600 hover:bg-teal-700 px-3 py-2 rounded-md text-sm font-medium transition duration-150">
-                  Sign In
-                </Link>
-              )}
+              ) : null}
             </div>
 
             <div className="flex items-center md:hidden">
@@ -168,15 +164,7 @@ const Navbar: React.FC = () => {
                   Sign Out
                 </button>
               </>
-            ) : (
-              <Link 
-                to="/auth" 
-                className="block px-3 py-2 rounded-md text-base font-medium text-white bg-teal-600 hover:bg-teal-700"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                Sign In
-              </Link>
-            )}
+            ) : null}
           </div>
         </div>
       </nav>

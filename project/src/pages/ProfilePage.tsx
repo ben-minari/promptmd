@@ -51,13 +51,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onOpenModal, hasPrompts }) =>
     return (
       <div className="flex flex-col items-center justify-center py-12">
         <h1 className="text-2xl font-bold text-slate-800 mb-4">You're not signed in</h1>
-        <p className="text-slate-600 mb-6">Please sign in to view your profile</p>
-        <a 
-          href="/auth" 
-          className="px-4 py-2 bg-teal-600 text-white rounded-md hover:bg-teal-700 transition duration-150"
-        >
-          Sign In
-        </a>
+        <p className="text-slate-600">Please sign in to view your profile</p>
       </div>
     );
   }

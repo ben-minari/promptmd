@@ -4,13 +4,12 @@ import { Mail, Lock, ArrowRight, Check } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const AuthPage: React.FC = () => {
-  const { login, register, signInWithGoogle, loginWithDoximity, user } = useAuth();
+  const { login, register, signInWithGoogle, user } = useAuth();
   const navigate = useNavigate();
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
-  const [isDoximity, setIsDoximity] = useState(false);
   const [authError, setAuthError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -65,19 +64,6 @@ const AuthPage: React.FC = () => {
     } catch (error) {
       console.error('Google sign-in error:', error);
       setAuthError('Google sign-in failed. Please try again.');
-      setIsLoading(false);
-    }
-  };
-
-  const handleDoximitySignIn = async () => {
-    setAuthError('');
-    setIsLoading(true);
-    try {
-      await loginWithDoximity();
-    } catch (error) {
-      console.error('Doximity sign-in error:', error);
-      setAuthError('Doximity sign-in failed. Please try again.');
-    } finally {
       setIsLoading(false);
     }
   };
@@ -177,22 +163,6 @@ const AuthPage: React.FC = () => {
               </div>
             </div>
 
-            {!isLogin && (
-              <div className="flex items-center">
-                <input
-                  id="doximity"
-                  name="doximity"
-                  type="checkbox"
-                  checked={isDoximity}
-                  onChange={(e) => setIsDoximity(e.target.checked)}
-                  className="h-4 w-4 text-teal-600 focus:ring-teal-500 border-slate-300 rounded"
-                />
-                <label htmlFor="doximity" className="ml-2 block text-sm text-slate-700">
-                  I am a verified healthcare professional on Doximity
-                </label>
-              </div>
-            )}
-
             {authError && (
               <div className="rounded-md bg-red-50 p-4">
                 <div className="flex">
@@ -243,7 +213,7 @@ const AuthPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="mt-6 grid grid-cols-2 gap-3">
+            <div className="mt-6 grid grid-cols-1 gap-3">
               <button
                 type="button"
                 onClick={handleGoogleSignIn}
@@ -261,21 +231,6 @@ const AuthPage: React.FC = () => {
                   </g>
                 </svg>
                 Google
-              </button>
-
-              <button
-                type="button"
-                onClick={handleDoximitySignIn}
-                disabled={isLoading}
-                className={`w-full inline-flex justify-center py-2 px-4 border border-slate-300 rounded-md shadow-sm bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 ${
-                  isLoading ? 'opacity-70 cursor-not-allowed' : ''
-                }`}
-              >
-                <svg className="h-5 w-5 mr-2" fill="#3BB9FF" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/>
-                  <path d="M13 7h-2v5h-2v2h2v2h2v-2h2v-2h-2z"/>
-                </svg>
-                Doximity
               </button>
             </div>
           </div>
