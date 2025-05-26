@@ -3,21 +3,18 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Stethoscope, Search, Menu, X, LogOut, User, PlusCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import SubmitPromptModal from '../prompts/SubmitPromptModal';
+import { useSearch } from '../../context/SearchContext';
 
 const Navbar: React.FC = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
+  const { searchQuery, setSearchQuery } = useSearch();
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    if (searchQuery.trim()) {
-      navigate(`/browse?q=${encodeURIComponent(searchQuery)}`);
-      setSearchQuery('');
-      setMobileMenuOpen(false);
-    }
+    // Optionally, you can navigate or filter here, but global state is now updated
   };
 
   const toggleMobileMenu = () => {

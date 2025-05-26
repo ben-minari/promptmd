@@ -1,87 +1,93 @@
 import React, { useState, useEffect } from 'react';
 import { usePrompt } from '../context/PromptContext';
 import { useAuth } from '../context/AuthContext';
+import { Tool } from '../types';
 
 const PromptTest: React.FC = () => {
   const { user, signInWithGoogle } = useAuth();
   const {
-    allPrompts,
-    featuredPrompts,
-    trendingPrompts,
-    getUserPrompts,
-    getSavedPrompts,
-    addPrompt,
-    savePrompt,
-    ratePrompt,
-    loading,
-    error,
+    tools,
+    userTools,
+    savedTools,
+    addTool,
+    saveTool,
+    rateTool,
+    getTools
   } = usePrompt();
 
-  const [userPrompts, setUserPrompts] = useState<any[]>([]);
-  const [savedPrompts, setSavedPrompts] = useState<any[]>([]);
-  const [newPrompt, setNewPrompt] = useState({
+  const [newTool, setNewTool] = useState<Partial<Tool>>({
     title: '',
     description: '',
     content: '',
-    category: 'General',
-    specialty: 'General',
-    tools: ['ChatGPT'],
+    tags: {
+      specialty: ['General'],
+      useCase: ['General'],
+      userType: ['General'],
+      appModel: ['ChatGPT']
+    },
+    type: 'prompt',
+    status: 'published',
+    version: '1.0.0',
+    saveCount: 0,
+    ratingAvg: 0,
+    ratingCount: 0
   });
 
   useEffect(() => {
-    const loadUserPrompts = async () => {
-      if (user) {
-        const prompts = await getUserPrompts();
-        setUserPrompts(prompts);
-        setSavedPrompts(getSavedPrompts());
-      }
-    };
-    loadUserPrompts();
-  }, [user, getUserPrompts, getSavedPrompts]);
+    if (user) {
+      getTools();
+    }
+  }, [user, getTools]);
 
-  const handleAddPrompt = async (e: React.FormEvent) => {
+  const handleAddTool = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await addPrompt(newPrompt);
-      setNewPrompt({
+      await addTool(newTool as Tool);
+      setNewTool({
         title: '',
         description: '',
         content: '',
-        category: 'General',
-        specialty: 'General',
-        tools: ['ChatGPT'],
+        tags: {
+          specialty: ['General'],
+          useCase: ['General'],
+          userType: ['General'],
+          appModel: ['ChatGPT']
+        },
+        type: 'prompt',
+        status: 'published',
+        version: '1.0.0',
+        saveCount: 0,
+        ratingAvg: 0,
+        ratingCount: 0
       });
-      const prompts = await getUserPrompts();
-      setUserPrompts(prompts);
     } catch (err) {
-      console.error('Error adding prompt:', err);
+      console.error('Error adding tool:', err);
     }
   };
 
-  const handleSavePrompt = async (promptId: string) => {
+  const handleSaveTool = async (toolId: string) => {
     try {
-      await savePrompt(promptId);
-      setSavedPrompts(getSavedPrompts());
+      await saveTool(toolId);
     } catch (err) {
-      console.error('Error saving prompt:', err);
+      console.error('Error saving tool:', err);
     }
   };
 
-  const handleRatePrompt = async (promptId: string, rating: number) => {
+  const handleRateTool = async (toolId: string, rating: number) => {
     try {
-      await ratePrompt(promptId, rating);
+      await rateTool(toolId, rating);
     } catch (err) {
-      console.error('Error rating prompt:', err);
+      console.error('Error rating tool:', err);
     }
   };
 
   if (!user) {
     return (
       <div className="p-4">
-        <h2 className="text-xl font-bold mb-4">Please sign in to test prompts</h2>
+        <h1 className="text-2xl font-bold mb-4">Please Sign In</h1>
         <button
           onClick={signInWithGoogle}
-          className="bg-blue-500 text-white px-4 py-2 rounded"
+          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
         >
           Sign in with Google
         </button>
@@ -89,120 +95,81 @@ const PromptTest: React.FC = () => {
     );
   }
 
-  if (loading) {
-    return <div className="p-4">Loading...</div>;
-  }
-
-  if (error) {
-    return <div className="p-4 text-red-500">Error: {error}</div>;
-  }
-
   return (
     <div className="p-4">
-      <h2 className="text-2xl font-bold mb-6">Prompt Management Test</h2>
-
-      {/* Add New Prompt Form */}
-      <div className="mb-8 p-4 border rounded">
-        <h3 className="text-xl font-semibold mb-4">Add New Prompt</h3>
-        <form onSubmit={handleAddPrompt} className="space-y-4">
-          <div>
-            <label className="block mb-1">Title</label>
-            <input
-              type="text"
-              value={newPrompt.title}
-              onChange={(e) => setNewPrompt({ ...newPrompt, title: e.target.value })}
-              className="w-full p-2 border rounded"
-              required
-            />
-          </div>
-          <div>
-            <label className="block mb-1">Description</label>
-            <input
-              type="text"
-              value={newPrompt.description}
-              onChange={(e) => setNewPrompt({ ...newPrompt, description: e.target.value })}
-              className="w-full p-2 border rounded"
-              required
-            />
-          </div>
-          <div>
-            <label className="block mb-1">Content</label>
-            <textarea
-              value={newPrompt.content}
-              onChange={(e) => setNewPrompt({ ...newPrompt, content: e.target.value })}
-              className="w-full p-2 border rounded"
-              required
-            />
-          </div>
+      <h1 className="text-2xl font-bold mb-4">Prompt Test</h1>
+      
+      {/* Add New Tool Form */}
+      <form onSubmit={handleAddTool} className="mb-8 p-4 border rounded">
+        <h2 className="text-xl font-semibold mb-4">Add New Tool</h2>
+        <div className="space-y-4">
+          <input
+            type="text"
+            placeholder="Title"
+            value={newTool.title}
+            onChange={(e) => setNewTool({ ...newTool, title: e.target.value })}
+            className="w-full p-2 border rounded"
+          />
+          <input
+            type="text"
+            placeholder="Description"
+            value={newTool.description}
+            onChange={(e) => setNewTool({ ...newTool, description: e.target.value })}
+            className="w-full p-2 border rounded"
+          />
+          <textarea
+            placeholder="Content"
+            value={newTool.content}
+            onChange={(e) => setNewTool({ ...newTool, content: e.target.value })}
+            className="w-full p-2 border rounded"
+            rows={4}
+          />
           <button
             type="submit"
-            className="bg-green-500 text-white px-4 py-2 rounded"
+            className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
           >
-            Add Prompt
+            Add Tool
           </button>
-        </form>
-      </div>
-
-      {/* Featured Prompts */}
-      <div className="mb-8">
-        <h3 className="text-xl font-semibold mb-4">Featured Prompts</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {featuredPrompts.map((prompt) => (
-            <div key={prompt.id} className="border p-4 rounded">
-              <h4 className="font-bold">{prompt.title}</h4>
-              <p className="text-sm text-gray-600">{prompt.description}</p>
-              <div className="mt-2">
-                <button
-                  onClick={() => handleSavePrompt(prompt.id)}
-                  className="text-blue-500 mr-2"
-                >
-                  {savedPrompts.some((p) => p.id === prompt.id) ? 'Unsave' : 'Save'}
-                </button>
-                <button
-                  onClick={() => handleRatePrompt(prompt.id, 5)}
-                  className="text-yellow-500"
-                >
-                  Rate (5)
-                </button>
-              </div>
-            </div>
-          ))}
         </div>
-      </div>
+      </form>
 
-      {/* User's Prompts */}
+      {/* User's Tools */}
       <div className="mb-8">
-        <h3 className="text-xl font-semibold mb-4">Your Prompts</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {userPrompts.map((prompt) => (
-            <div key={prompt.id} className="border p-4 rounded">
-              <h4 className="font-bold">{prompt.title}</h4>
-              <p className="text-sm text-gray-600">{prompt.description}</p>
-              <p className="mt-2 text-sm">
-                Rating: {prompt.rating} ({prompt.ratingCount} votes)
-              </p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Saved Prompts */}
-      <div>
-        <h3 className="text-xl font-semibold mb-4">Saved Prompts</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {savedPrompts.map((prompt) => (
-            <div key={prompt.id} className="border p-4 rounded">
-              <h4 className="font-bold">{prompt.title}</h4>
-              <p className="text-sm text-gray-600">{prompt.description}</p>
+        <h2 className="text-xl font-semibold mb-4">Your Tools</h2>
+        {userTools.map((tool) => (
+          <div key={tool.id} className="p-4 border rounded mb-4">
+            <h3 className="font-semibold">{tool.title}</h3>
+            <p>{tool.description}</p>
+            <div className="mt-2 space-x-2">
               <button
-                onClick={() => handleSavePrompt(prompt.id)}
-                className="text-red-500 mt-2"
+                onClick={() => handleSaveTool(tool.id!)}
+                className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
               >
-                Unsave
+                {savedTools.some((t) => t.id === tool.id) ? 'Unsave' : 'Save'}
+              </button>
+              <button
+                onClick={() => handleRateTool(tool.id!, 5)}
+                className="px-3 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600"
+              >
+                Rate 5 Stars
               </button>
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
+      </div>
+
+      {/* All Tools */}
+      <div className="mb-8">
+        <h2 className="text-xl font-semibold mb-4">All Tools</h2>
+        {tools.map((tool) => (
+          <div key={tool.id} className="p-4 border rounded mb-4">
+            <h3 className="font-semibold">{tool.title}</h3>
+            <p>{tool.description}</p>
+            <p className="text-sm text-gray-500">
+              Saved {tool.saveCount} times | Rated {tool.ratingAvg.toFixed(1)} ({tool.ratingCount} ratings)
+            </p>
+          </div>
+        ))}
       </div>
     </div>
   );

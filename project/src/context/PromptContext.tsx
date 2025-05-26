@@ -1,441 +1,443 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { supabase } from './AuthContext';
-
-// Sample data
-import { samplePrompts } from '../data/samplePrompts';
-
-export interface Prompt {
-  id: string;
-  title: string;
-  description: string;
-  content: string;
-  category: string;
-  specialty: string;
-  tools: string[];
-  sources?: string[]; // Optional array of sources
-  author: {
-    id: string;
-    name: string;
-    avatar: string;
-  };
-  created_at: string;
-  rating: number;
-  rating_count: number;
-  usage_count: number; // This now represents number of saves
-  featured: boolean;
-  comments?: any[]; // Optional array of comments
-}
+import { useAuth } from './AuthContext';
+import { db } from '../config/firebase';
+import {
+  collection,
+  doc,
+  getDocs,
+  getDoc,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  query,
+  where,
+  orderBy,
+  limit,
+  serverTimestamp,
+  arrayUnion,
+  arrayRemove,
+  increment,
+  DocumentData,
+  QueryDocumentSnapshot,
+  DocumentSnapshot,
+  WithFieldValue,
+  onSnapshot,
+  setDoc,
+  Timestamp
+} from 'firebase/firestore';
+import { Tool } from '../types';
 
 interface PromptContextType {
-  allPrompts: Prompt[];
-  featuredPrompts: Prompt[];
-  trendingPrompts: Prompt[];
-  getPromptById: (id: string) => Prompt | undefined;
-  getUserPromptRating: (promptId: string) => Promise<number | null>;
-  getUserPrompts: () => Promise<Prompt[]>;
-  getSavedPrompts: () => Prompt[];
-  addPrompt: (prompt: Omit<Prompt, 'id' | 'author' | 'created_at' | 'rating' | 'rating_count' | 'usage_count' | 'featured'>) => Promise<void>;
-  savePrompt: (promptId: string) => Promise<void>;
-  ratePrompt: (promptId: string, rating: number) => Promise<Prompt>;
-  refreshPrompts: () => Promise<void>;
-  loading: boolean;
-  error: string | null;
+  tools: Tool[];
+  userTools: Tool[];
+  savedTools: Tool[];
+  featuredPrompts: Tool[];
+  trendingPrompts: Tool[];
+  getTools: () => Promise<Tool[]>;
+  getTool: (id: string) => Promise<Tool | null>;
+  getUserPrompts: () => Promise<Tool[]>;
+  getSavedPrompts: () => Promise<Tool[]>;
+  addTool: (tool: Omit<Tool, 'id' | 'createdAt' | 'updatedAt' | 'saveCount' | 'ratingAvg' | 'ratingCount'>) => Promise<void>;
+  updateTool: (id: string, tool: Partial<Tool>) => Promise<void>;
+  deleteTool: (id: string) => Promise<void>;
+  saveTool: (id: string) => Promise<void>;
+  rateTool: (id: string, rating: number) => Promise<void>;
 }
 
 const PromptContext = createContext<PromptContextType | undefined>(undefined);
 
 export const usePrompt = () => {
   const context = useContext(PromptContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error('usePrompt must be used within a PromptProvider');
   }
   return context;
 };
 
 export const PromptProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [prompts, setPrompts] = useState<Prompt[]>([]);
-  const [savedPromptIds, setSavedPromptIds] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth();
+  const [tools, setTools] = useState<Tool[]>([]);
+  const [userTools, setUserTools] = useState<Tool[]>([]);
+  const [savedTools, setSavedTools] = useState<Tool[]>([]);
+  const [featuredPrompts, setFeaturedPrompts] = useState<Tool[]>([]);
+  const [trendingPrompts, setTrendingPrompts] = useState<Tool[]>([]);
 
   useEffect(() => {
-    fetchPrompts();
-    fetchSavedPrompts();
+    if (user) {
+      // Set up real-time listener for user's tools
+      const userToolsRef = collection(db, 'tools');
+      const userToolsQuery = query(
+        userToolsRef,
+        where('authorId', '==', user.uid),
+        orderBy('updatedAt', 'desc')
+      );
+      
+      const userToolsUnsubscribe = onSnapshot(userToolsQuery, (snapshot) => {
+        const loadedTools = snapshot.docs.map((doc) => ({
+          ...doc.data(),
+          id: doc.id,
+          createdAt: doc.data().createdAt?.toDate(),
+          updatedAt: doc.data().updatedAt?.toDate()
+        })) as Tool[];
+        setUserTools(loadedTools);
+      });
+
+      // Set up real-time listener for saved tools
+      const userRef = doc(db, 'users', user.uid);
+      const savedToolsUnsubscribe = onSnapshot(userRef, async (userDoc) => {
+        if (userDoc.exists()) {
+          const savedToolIds = userDoc.data().savedTools || [];
+          const savedToolsData = await Promise.all(
+            savedToolIds.map(async (toolId: string) => {
+              const toolDoc = await getDoc(doc(db, 'tools', toolId));
+              if (toolDoc.exists()) {
+                const toolData = toolDoc.data();
+                return {
+                  ...toolData,
+                  id: toolDoc.id,
+                  createdAt: toolData.createdAt?.toDate(),
+                  updatedAt: toolData.updatedAt?.toDate(),
+                  isSaved: true
+                } as Tool;
+              }
+              return null;
+            })
+          );
+          setSavedTools(savedToolsData.filter((tool): tool is Tool => tool !== null));
+        }
+      });
+
+      return () => {
+        userToolsUnsubscribe();
+        savedToolsUnsubscribe();
+      };
+    }
+  }, [user]);
+
+  // Load featured and trending prompts
+  useEffect(() => {
+    const loadFeaturedAndTrending = async () => {
+      try {
+        // Get featured prompts (highest rated)
+        const featuredQuery = query(
+          collection(db, 'tools'),
+          where('status', '==', 'published'),
+          orderBy('ratingAvg', 'desc'),
+          orderBy('__name__', 'desc'),
+          limit(3)
+        );
+        const featuredSnapshot = await getDocs(featuredQuery);
+        const featured = featuredSnapshot.docs.map(doc => ({
+          ...doc.data(),
+          id: doc.id,
+          createdAt: doc.data().createdAt?.toDate(),
+          updatedAt: doc.data().updatedAt?.toDate()
+        })) as Tool[];
+        setFeaturedPrompts(featured);
+
+        // Get trending prompts (most saved)
+        const trendingQuery = query(
+          collection(db, 'tools'),
+          where('status', '==', 'published'),
+          orderBy('saveCount', 'desc'),
+          limit(3)
+        );
+        const trendingSnapshot = await getDocs(trendingQuery);
+        const trending = trendingSnapshot.docs.map(doc => ({
+          ...doc.data(),
+          id: doc.id,
+          createdAt: doc.data().createdAt?.toDate(),
+          updatedAt: doc.data().updatedAt?.toDate()
+        })) as Tool[];
+        setTrendingPrompts(trending);
+      } catch (error) {
+        console.error('Error loading featured and trending prompts:', error);
+      }
+    };
+
+    loadFeaturedAndTrending();
   }, []);
 
-  const fetchPrompts = async () => {
+  const getTools = async (): Promise<Tool[]> => {
     try {
-      console.log('Fetching prompts from Supabase...');
-      const { data, error } = await supabase
-        .from('prompts')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Error fetching prompts:', error);
-        throw error;
-      }
-      
-      console.log('Fetched prompts:', data);
-      setPrompts(data || []);
-    } catch (err) {
-      console.error('Error in fetchPrompts:', err);
-      setError('Failed to fetch prompts');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchSavedPrompts = async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) return;
-
-      const { data, error } = await supabase
-        .from('saved_prompts')
-        .select('prompt_id')
-        .eq('user_id', session.user.id);
-
-      if (error) throw error;
-      setSavedPromptIds(data?.map(item => item.prompt_id) || []);
-    } catch (err) {
-      console.error('Error fetching saved prompts:', err);
-    }
-  };
-
-  const getPromptById = (id: string) => {
-    return prompts.find(prompt => prompt.id === id);
-  };
-
-  const featuredPrompts = prompts.filter(prompt => prompt.featured).slice(0, 3);
-
-  const trendingPrompts = [...prompts]
-    .sort((a, b) => b.usage_count - a.usage_count)
-    .slice(0, 3);
-
-  const getUserPrompts = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    return prompts.filter(prompt => prompt.author.id === session?.user?.id);
-  };
-
-  const getSavedPrompts = () => {
-    return prompts.filter(prompt => savedPromptIds.includes(prompt.id));
-  };
-
-  const addPrompt = async (promptData: Omit<Prompt, 'id' | 'author' | 'created_at' | 'rating' | 'rating_count' | 'usage_count' | 'featured'>) => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) throw new Error('User not authenticated');
-
-      console.log('Creating prompt with data:', promptData);
-      console.log('User session:', session.user);
-
-      const newPrompt = {
-        ...promptData,
-        tools: promptData.tools,
-        author: {
-          id: session.user.id,
-          name: session.user.user_metadata.full_name || 'Anonymous',
-          avatar: session.user.user_metadata.avatar_url || '',
-        },
-        created_at: new Date().toISOString(),
-        rating: 0,
-        rating_count: 0,
-        usage_count: 0,
-        featured: false,
-      };
-
-      console.log('Sending to Supabase:', newPrompt);
-
-      const { data, error } = await supabase
-        .from('prompts')
-        .insert([newPrompt])
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Supabase error:', error);
-        throw error;
-      }
-
-      console.log('Created prompt:', data);
-      
-      // Verify the prompt was created by fetching it
-      const { data: verifyData, error: verifyError } = await supabase
-        .from('prompts')
-        .select('*')
-        .eq('id', data.id)
-        .single();
-
-      if (verifyError) {
-        console.error('Error verifying prompt creation:', verifyError);
-      } else {
-        console.log('Verified prompt in database:', verifyData);
-      }
-
-      setPrompts([data, ...prompts]);
-    } catch (err) {
-      console.error('Error in addPrompt:', err);
-      setError('Failed to add prompt');
-      throw err;
-    }
-  };
-
-  const savePrompt = async (promptId: string) => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) throw new Error('User not authenticated');
-
-      console.log('Starting savePrompt operation for promptId:', promptId);
-
-      // Get current prompt data
-      const { data: promptData, error: fetchError } = await supabase
-        .from('prompts')
-        .select('usage_count, author')
-        .eq('id', promptId)
-        .single();
-
-      if (fetchError) {
-        console.error('Error fetching prompt data:', fetchError);
-        throw fetchError;
-      }
-
-      console.log('Current prompt data:', promptData);
-
-      // Get the current prompt from our state
-      const currentPrompt = prompts.find(p => p.id === promptId);
-      if (!currentPrompt) {
-        throw new Error('Prompt not found in state');
-      }
-
-      // Use the current state's usage_count as the source of truth
-      const currentUsageCount = currentPrompt.usage_count;
-      const isCurrentlySaved = savedPromptIds.includes(promptId);
-      const newUsageCount = isCurrentlySaved 
-        ? Math.max(currentUsageCount - 1, 0)
-        : currentUsageCount + 1;
-
-      // Start a transaction to update both tables
-      const { error: updateError } = await supabase
-        .from('prompts')
-        .update({ usage_count: newUsageCount })
-        .eq('id', promptId);
-
-      if (updateError) {
-        console.error('Error updating usage_count:', updateError);
-        throw updateError;
-      }
-
-      // Update saved_prompts table
-      if (isCurrentlySaved) {
-        console.log('Removing prompt from saved prompts');
-        const { error } = await supabase
-          .from('saved_prompts')
-          .delete()
-          .eq('user_id', session.user.id)
-          .eq('prompt_id', promptId);
-
-        if (error) {
-          console.error('Error removing from saved_prompts:', error);
-          throw error;
-        }
-      } else {
-        console.log('Adding prompt to saved prompts');
-        const { error } = await supabase
-          .from('saved_prompts')
-          .insert([{ user_id: session.user.id, prompt_id: promptId }]);
-
-        if (error) {
-          console.error('Error adding to saved_prompts:', error);
-          throw error;
-        }
-      }
-
-      // Update all state atomically
-      setPrompts(prevPrompts => 
-        prevPrompts.map(prompt => 
-          prompt.id === promptId 
-            ? { ...prompt, usage_count: newUsageCount }
-            : prompt
-        )
+      const toolsRef = collection(db, 'tools');
+      const q = query(
+        toolsRef,
+        where('status', '==', 'published'),
+        orderBy('updatedAt', 'desc'),
+        orderBy('__name__', 'desc')
       );
-
-      setSavedPromptIds(prev => 
-        isCurrentlySaved 
-          ? prev.filter(id => id !== promptId)
-          : [...prev, promptId]
-      );
-      
-      console.log('Save operation completed successfully');
-    } catch (err) {
-      console.error('Error in savePrompt:', err);
-      setError('Failed to save prompt');
-      throw err;
+      const querySnapshot = await getDocs(q);
+      const loadedTools = querySnapshot.docs.map((doc: QueryDocumentSnapshot<DocumentData>) => ({
+        ...doc.data(),
+        id: doc.id,
+        createdAt: doc.data().createdAt?.toDate(),
+        updatedAt: doc.data().updatedAt?.toDate()
+      })) as Tool[];
+      setTools(loadedTools);
+      return loadedTools;
+    } catch (error) {
+      console.error('Error getting tools:', error);
+      return [];
     }
   };
 
-  const ratePrompt = async (promptId: string, rating: number): Promise<Prompt> => {
+  const getTool = async (id: string): Promise<Tool | null> => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) throw new Error('User not authenticated');
-
-      console.log('Rating prompt:', { promptId, rating, userId: session.user.id });
-
-      // First, check if the user has already rated this prompt
-      const { data: existingRating, error: checkError } = await supabase
-        .from('prompt_ratings')
-        .select('id, rating')
-        .eq('user_id', session.user.id)
-        .eq('prompt_id', promptId)
-        .maybeSingle();
-
-      if (checkError) {
-        console.error('Error checking existing rating:', checkError);
-        throw checkError;
+      const toolDoc = await getDoc(doc(db, 'tools', id));
+      if (toolDoc.exists()) {
+        const toolData = toolDoc.data();
+        return {
+          ...toolData,
+          id: toolDoc.id,
+          createdAt: toolData.createdAt?.toDate(),
+          updatedAt: toolData.updatedAt?.toDate()
+        } as Tool;
       }
-
-      console.log('Existing rating:', existingRating);
-
-      let error;
-      if (existingRating) {
-        // Update existing rating
-        console.log('Updating existing rating:', { id: existingRating.id, newRating: rating });
-        const { error: updateError } = await supabase
-          .from('prompt_ratings')
-          .update({ rating, updated_at: new Date().toISOString() })
-          .eq('id', existingRating.id);
-        error = updateError;
-      } else {
-        // Insert new rating
-        console.log('Inserting new rating:', { userId: session.user.id, promptId, rating });
-        const { error: insertError } = await supabase
-          .from('prompt_ratings')
-          .insert({
-            user_id: session.user.id,
-            prompt_id: promptId,
-            rating
-          });
-        error = insertError;
-      }
-
-      if (error) {
-        console.error('Error updating/inserting rating:', error);
-        throw error;
-      }
-
-      // Wait a short moment to ensure the trigger has completed
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      // Refresh all prompts to ensure we have the latest data
-      await refreshPrompts();
-
-      // Fetch the specific prompt to return
-      const { data: updatedPrompt, error: fetchError } = await supabase
-        .from('prompts')
-        .select('*')
-        .eq('id', promptId)
-        .single();
-
-      if (fetchError) {
-        console.error('Error fetching updated prompt:', fetchError);
-        throw fetchError;
-      }
-      if (!updatedPrompt) {
-        throw new Error('Failed to fetch updated prompt');
-      }
-
-      console.log('Updated prompt from database:', updatedPrompt);
-
-      // Also fetch the current ratings to verify
-      const { data: ratings, error: ratingsError } = await supabase
-        .from('prompt_ratings')
-        .select('rating')
-        .eq('prompt_id', promptId);
-
-      if (ratingsError) {
-        console.error('Error fetching ratings:', ratingsError);
-      } else {
-        console.log('Current ratings for prompt:', ratings);
-        const avgRating = ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length;
-        console.log('Calculated average rating:', avgRating);
-        console.log('Number of ratings:', ratings.length);
-      }
-
-      return updatedPrompt as Prompt;
-    } catch (err) {
-      console.error('Error in ratePrompt:', err);
-      setError('Failed to rate prompt');
-      throw err;
-    }
-  };
-
-  const getUserPromptRating = async (promptId: string) => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) return null;
-
-      const { data, error } = await supabase
-        .from('prompt_ratings')
-        .select('rating')
-        .eq('user_id', session.user.id)
-        .eq('prompt_id', promptId)
-        .maybeSingle();
-
-      if (error) {
-        console.error('Error getting user rating:', error);
-        return null;
-      }
-      return data?.rating || null;
-    } catch (err) {
-      console.error('Error getting user rating:', err);
+      return null;
+    } catch (error) {
+      console.error('Error getting tool:', error);
       return null;
     }
   };
 
-  const refreshPrompts = async () => {
-    try {
-      console.log('Refreshing prompts...');
-      const { data, error } = await supabase
-        .from('prompts')
-        .select('*')
-        .order('created_at', { ascending: false });
+  const getUserPrompts = async (): Promise<Tool[]> => {
+    if (!user) throw new Error('User must be authenticated to get user prompts');
 
-      if (error) {
-        console.error('Error refreshing prompts:', error);
-        throw error;
-      }
-      
-      console.log('Refreshed prompts:', data);
-      if (data) {
-        setPrompts(data);
-        // Force a re-render by creating a new array
-        setPrompts([...data]);
-      }
-    } catch (err) {
-      console.error('Error in refreshPrompts:', err);
-      setError('Failed to refresh prompts');
+    try {
+      const toolsRef = collection(db, 'tools');
+      const q = query(
+        toolsRef,
+        where('authorId', '==', user.uid),
+        orderBy('updatedAt', 'desc'),
+        orderBy('__name__', 'desc')
+      );
+      const querySnapshot = await getDocs(q);
+      const loadedTools = querySnapshot.docs.map((doc: QueryDocumentSnapshot<DocumentData>) => ({
+        ...doc.data(),
+        id: doc.id,
+        createdAt: doc.data().createdAt?.toDate(),
+        updatedAt: doc.data().updatedAt?.toDate()
+      })) as Tool[];
+      setUserTools(loadedTools);
+      return loadedTools;
+    } catch (error) {
+      console.error('Error getting user prompts:', error);
+      return [];
     }
   };
 
-  return (
-    <PromptContext.Provider
-      value={{
-        allPrompts: prompts,
-        featuredPrompts,
-        trendingPrompts,
-        getPromptById,
-        getUserPromptRating,
-        getUserPrompts,
-        getSavedPrompts,
-        addPrompt,
-        savePrompt,
-        ratePrompt,
-        refreshPrompts,
-        loading,
-        error,
-      }}
-    >
-      {children}
-    </PromptContext.Provider>
-  );
+  const getSavedPrompts = async (): Promise<Tool[]> => {
+    if (!user) throw new Error('User must be authenticated to get saved prompts');
+
+    try {
+      const userRef = doc(db, 'users', user.uid);
+      const userDoc = await getDoc(userRef);
+      
+      if (!userDoc.exists()) {
+        return [];
+      }
+
+      const savedToolIds = userDoc.data().savedTools || [];
+      const savedToolsData = await Promise.all(
+        savedToolIds.map(async (toolId: string) => {
+          const toolDoc = await getDoc(doc(db, 'tools', toolId));
+          if (toolDoc.exists()) {
+            const toolData = toolDoc.data();
+            return {
+              ...toolData,
+              id: toolDoc.id,
+              createdAt: toolData.createdAt?.toDate(),
+              updatedAt: toolData.updatedAt?.toDate(),
+              isSaved: true
+            } as Tool;
+          }
+          return null;
+        })
+      );
+      
+      const validTools = savedToolsData.filter((tool): tool is Tool => tool !== null);
+      setSavedTools(validTools);
+      return validTools;
+    } catch (error) {
+      console.error('Error getting saved prompts:', error);
+      return [];
+    }
+  };
+
+  const addTool = async (tool: Omit<Tool, 'id' | 'createdAt' | 'updatedAt' | 'saveCount' | 'ratingAvg' | 'ratingCount'>) => {
+    if (!user) throw new Error('User must be authenticated to add a tool');
+    try {
+      const toolsRef = collection(db, 'tools');
+      const now = Timestamp.now();
+      const newTool: Omit<Tool, 'id'> = {
+        ...tool,
+        authorId: user.uid,
+        createdAt: now,
+        updatedAt: now,
+        saveCount: 0,
+        ratingAvg: 0,
+        ratingCount: 0,
+      };
+      await addDoc(toolsRef, newTool);
+      await getTools();
+    } catch (error) {
+      console.error('Error adding tool:', error);
+      throw error;
+    }
+  };
+
+  const updateTool = async (id: string, tool: Partial<Tool>) => {
+    if (!user) throw new Error('User must be authenticated to update a tool');
+
+    try {
+      const toolRef = doc(db, 'tools', id);
+      const toolDoc = await getDoc(toolRef);
+      
+      if (!toolDoc.exists()) {
+        throw new Error('Tool not found');
+      }
+
+      if (toolDoc.data().authorId !== user.uid) {
+        throw new Error('User is not authorized to update this tool');
+      }
+
+      await updateDoc(toolRef, {
+        ...tool,
+        updatedAt: serverTimestamp()
+      });
+      await getTools();
+    } catch (error) {
+      console.error('Error updating tool:', error);
+      throw error;
+    }
+  };
+
+  const deleteTool = async (id: string) => {
+    if (!user) throw new Error('User must be authenticated to delete a tool');
+
+    try {
+      const toolRef = doc(db, 'tools', id);
+      const toolDoc = await getDoc(toolRef);
+      
+      if (!toolDoc.exists()) {
+        throw new Error('Tool not found');
+      }
+
+      if (toolDoc.data().authorId !== user.uid) {
+        throw new Error('User is not authorized to delete this tool');
+      }
+
+      await deleteDoc(toolRef);
+      await getTools();
+    } catch (error) {
+      console.error('Error deleting tool:', error);
+      throw error;
+    }
+  };
+
+  const saveTool = async (id: string) => {
+    if (!user) throw new Error('User must be authenticated to save a tool');
+
+    try {
+      const toolRef = doc(db, 'tools', id);
+      const userRef = doc(db, 'users', user.uid);
+      const toolDoc = await getDoc(toolRef);
+      
+      if (!toolDoc.exists()) {
+        throw new Error('Tool not found');
+      }
+
+      const userDoc = await getDoc(userRef);
+      let savedTools: string[] = [];
+
+      if (userDoc.exists()) {
+        savedTools = userDoc.data()?.savedTools || [];
+      } else {
+        // Create user document if it doesn't exist
+        await setDoc(userRef, {
+          savedTools: [],
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+      }
+
+      const isSaved = savedTools.includes(id);
+
+      if (isSaved) {
+        await updateDoc(userRef, {
+          savedTools: arrayRemove(id),
+          updatedAt: serverTimestamp()
+        });
+        await updateDoc(toolRef, {
+          saveCount: increment(-1),
+          updatedAt: serverTimestamp()
+        });
+      } else {
+        await updateDoc(userRef, {
+          savedTools: arrayUnion(id),
+          updatedAt: serverTimestamp()
+        });
+        await updateDoc(toolRef, {
+          saveCount: increment(1),
+          updatedAt: serverTimestamp()
+        });
+      }
+
+      // Refresh saved tools
+      await getSavedPrompts();
+    } catch (error) {
+      console.error('Error saving tool:', error);
+      throw error;
+    }
+  };
+
+  const rateTool = async (id: string, rating: number) => {
+    if (!user) throw new Error('User must be authenticated to rate a tool');
+    if (rating < 1 || rating > 5) throw new Error('Rating must be between 1 and 5');
+
+    try {
+      const toolRef = doc(db, 'tools', id);
+      const toolDoc = await getDoc(toolRef);
+      
+      if (!toolDoc.exists()) {
+        throw new Error('Tool not found');
+      }
+
+      const toolData = toolDoc.data();
+      const currentRatingAvg = toolData.ratingAvg || 0;
+      const currentRatingCount = toolData.ratingCount || 0;
+      const newRatingCount = currentRatingCount + 1;
+      const newRatingAvg = ((currentRatingAvg * currentRatingCount) + rating) / newRatingCount;
+
+      await updateDoc(toolRef, {
+        ratingAvg: newRatingAvg,
+        ratingCount: newRatingCount
+      });
+
+      await getTools();
+    } catch (error) {
+      console.error('Error rating tool:', error);
+      throw error;
+    }
+  };
+
+  const value = {
+    tools,
+    userTools,
+    savedTools,
+    featuredPrompts,
+    trendingPrompts,
+    getTools,
+    getTool,
+    getUserPrompts,
+    getSavedPrompts,
+    addTool,
+    updateTool,
+    deleteTool,
+    saveTool,
+    rateTool
+  };
+
+  return <PromptContext.Provider value={value}>{children}</PromptContext.Provider>;
 };

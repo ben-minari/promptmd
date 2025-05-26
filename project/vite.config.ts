@@ -6,18 +6,14 @@ export default defineConfig({
   plugins: [react()],
   base: '/',
   optimizeDeps: {
-    exclude: ['lucide-react'],
-    include: ['@supabase/supabase-js']
+    exclude: ['lucide-react']
   },
   build: {
     outDir: 'dist',
-    assetsDir: 'assets',
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          'supabase': ['@supabase/supabase-js']
-        }
-      }
-    }
+    assetsDir: 'assets'
+  },
+  server: {
+    port: 5173,
+    strictPort: true
   }
 });

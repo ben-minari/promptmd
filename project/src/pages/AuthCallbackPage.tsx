@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../context/AuthContext';
+import { auth } from '../config/firebase';
+import { getRedirectResult } from 'firebase/auth';
 
 export default function AuthCallbackPage() {
   const navigate = useNavigate();
@@ -8,20 +9,14 @@ export default function AuthCallbackPage() {
   useEffect(() => {
     const handleAuthCallback = async () => {
       try {
-        // Get the session from the URL
-        const { data: { session }, error } = await supabase.auth.exchangeCodeForSession(window.location.hash);
+        // Get the redirect result
+        const result = await getRedirectResult(auth);
         
-        if (error) {
-          console.error('Error getting session from URL:', error);
-          navigate('/auth?error=auth-failed');
-          return;
-        }
-        
-        if (session?.user) {
+        if (result?.user) {
           // User is authenticated, redirect to home
           navigate('/');
         } else {
-          // No session found, redirect to auth page with error
+          // No user found, redirect to auth page with error
           navigate('/auth?error=no-session');
         }
       } catch (error) {

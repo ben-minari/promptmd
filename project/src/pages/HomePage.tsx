@@ -21,9 +21,15 @@ const HomePage: React.FC = () => {
           </Link>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {trendingPrompts.map(prompt => (
-            <PromptCard key={prompt.id} prompt={prompt} />
-          ))}
+          {trendingPrompts?.length > 0 ? (
+            trendingPrompts.map(tool => (
+              <PromptCard key={tool.id} tool={tool} />
+            ))
+          ) : (
+            <p className="text-slate-500 col-span-3 text-center py-8">
+              No trending prompts yet. Be the first to create one!
+            </p>
+          )}
         </div>
       </section>
 
@@ -39,9 +45,15 @@ const HomePage: React.FC = () => {
           </Link>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {featuredPrompts.map(prompt => (
-            <PromptCard key={prompt.id} prompt={prompt} />
-          ))}
+          {featuredPrompts?.length > 0 ? (
+            featuredPrompts.map(tool => (
+              <PromptCard key={tool.id} tool={tool} />
+            ))
+          ) : (
+            <p className="text-slate-500 col-span-3 text-center py-8">
+              No featured prompts yet. Start rating prompts to see them here!
+            </p>
+          )}
         </div>
       </section>
 

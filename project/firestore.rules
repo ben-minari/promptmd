@@ -1,0 +1,71 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isPublished() {
+      return resource.data.status == "published";
+    }
+
+    // Tools collection
+    match /tools/{toolId} {
+  		// Allow admin user to write to tools for initialization
+  		allow write: if request.auth.token.admin == true;
+
+  		// Allow owners to create published prompts
+  		allow create: if isOwner(request.resource.data.authorId) && request.resource.data.status == "published";
+
+  		// Anyone can read published tools, and owners can read their own tools (published or draft)
+ 		 	allow read: if isPublished() || isOwner(resource.data.authorId);
+
+  		// Only the owner can update their published tools
+  		allow update: if isOwner(resource.data.authorId) && isPublished();
+
+  		// Only the owner can write their drafts
+  		allow write: if isOwner(resource.data.authorId) && resource.data.status == "draft";
+		}
+    
+
+    // User's saved tools subcollection
+    match /users/{userId}/savedTools/{toolId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // Ratings collection
+    match /ratings/{ratingId} {
+      // Anyone can read ratings
+      allow read: if true;
+      
+      // Only authenticated users can create ratings
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      
+      // Only the rating owner can update/delete their rating
+      allow update, delete: if isOwner(resource.data.userId);
+    }
+
+    // Users collection
+    match /users/{userId} {
+      // Allow users to read their own document
+      allow read: if isAuthenticated();
+      
+      // Allow users to create their own document
+      allow create: if isOwner(userId);
+      
+      // Allow users to update their own document, specifically the savedTools array
+      allow update: if isOwner(userId) && 
+        (
+          // Allow updating savedTools array
+          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['savedTools', 'updatedAt'])) ||
+          // Allow updating other fields if they exist in the original document
+          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(resource.data.keys()))
+        );
+    }
+  }
+}
